@@ -42,6 +42,12 @@ type FxHashMap<K, V> = HashMap<K, V, FxBuildHasher>;
 pub static PRECOMPUTED_WEIGHTS: Lazy<PrecomputedWeights> =
     Lazy::new(|| PrecomputedWeights::new(DOMAIN_SIZE));
 
+/// Shared default CRS. Constructing `CRS::default()` decompresses 257 points,
+/// each costing a modular square root plus a subgroup check (several
+/// milliseconds total), so it is done once per process and reused by every
+/// proof creation and verification.
+pub static DEFAULT_CRS: Lazy<CRS> = Lazy::new(CRS::default);
+
 /// Serde wrapper for banderwagon `Element` with validation and compression.
 ///
 /// This type ensures security by validating elements during deserialization
@@ -267,14 +273,13 @@ impl SaltProof {
 
         let mut transcript = Transcript::new(b"st");
 
-        let crs = CRS::default();
-
         // call MultiPointProof::check to verify the proof
-        if self
-            .proof
-            .0
-            .check(&crs, &PRECOMPUTED_WEIGHTS, &queries, &mut transcript)
-        {
+        if self.proof.0.check(
+            &DEFAULT_CRS,
+            &PRECOMPUTED_WEIGHTS,
+            &queries,
+            &mut transcript,
+        ) {
             Ok(())
         } else {
             Err(ProofError::MultiPointProofFailed)

@@ -217,9 +217,10 @@ impl IPAProof {
         let w = transcript.challenge_scalar(b"w");
 
         // Generate all of the necessary challenges and their inverses
+        // (log n elements — invert serially)
         let challenges = generate_challenges(self, transcript);
         let mut challenges_inv = challenges.clone();
-        batch_inversion(&mut challenges_inv);
+        serial_batch_inversion_and_mul(&mut challenges_inv, &Fr::one());
 
         // Generate the coefficients for the `G` vector and the `b` vector
         // {-g_i}{-b_i}
@@ -277,12 +278,10 @@ pub fn slow_vartime_multiscalar_mul<'a>(
 }
 
 pub fn multi_scalar_mul_par(bases: &[Element], scalars: &[Fr]) -> Element {
-    let chunk_size = bases.len().div_ceil(num_threads!());
-
-    chunks!(bases, chunk_size)
-        .zip(chunks!(scalars, chunk_size))
-        .map(|(bases, scalars)| multi_scalar_mul(bases, scalars))
-        .sum()
+    // `multi_scalar_mul` parallelizes internally across Pippenger windows;
+    // chunking the input here would multiply the window/doubling work per
+    // chunk and nest thread-pool dispatches.
+    multi_scalar_mul(bases, scalars)
 }
 
 fn generate_challenges(proof: &IPAProof, transcript: &mut Transcript) -> Vec<Fr> {

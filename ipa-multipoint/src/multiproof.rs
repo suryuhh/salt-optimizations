@@ -289,24 +289,45 @@ impl MultiPointProof {
 
         // 3. Compute g_2(t)
         //
-        let mut g2_den: Vec<_> = iter!(queries).map(|query| t - query.point).collect();
+        // A handful of field operations per query: serial execution beats
+        // waking the thread pool even for tens of thousands of queries.
+        let mut g2_den: Vec<_> = queries.iter().map(|query| t - query.point).collect();
 
-        batch_inversion(&mut g2_den);
+        serial_batch_inversion_and_mul(&mut g2_den, &Fr::one());
 
-        let helper_scalars: Vec<_> = into_iter!(powers_of_r)
+        let helper_scalars: Vec<_> = powers_of_r
+            .into_iter()
             .zip(g2_den)
             .map(|(r_i, den_inv)| den_inv * r_i)
             .collect();
 
-        let g2_t: Fr = iter!(helper_scalars)
-            .zip(iter!(queries))
+        let g2_t: Fr = helper_scalars
+            .iter()
+            .zip(queries.iter())
             .map(|(r_i_den_inv, query)| *r_i_den_inv * query.result)
             .sum();
 
         //4. Compute [g_1(X)] = E
-        let comms: Vec<_> = iter!(queries).map(|query| query.commitment).collect();
+        //
+        // Queries arrive grouped per trie node, so runs of consecutive queries
+        // share one commitment. Summing the scalars of each run first shrinks
+        // the multiexp from one point per query to one point per node, which
+        // is where verification time is spent for large witnesses.
+        // (The maintainers' run-coalescing, salt PR #152, `MultiPointProof::check`, taken as it
+        // is written there: the floor this tree measures.)
+        let mut comms: Vec<Element> = Vec::with_capacity(queries.len());
+        let mut comm_scalars: Vec<Fr> = Vec::with_capacity(queries.len());
+        for (query, scalar) in queries.iter().zip(helper_scalars.iter()) {
+            match (comms.last(), comm_scalars.last_mut()) {
+                (Some(last), Some(acc)) if *last == query.commitment => *acc += scalar,
+                _ => {
+                    comms.push(query.commitment);
+                    comm_scalars.push(*scalar);
+                }
+            }
+        }
 
-        let g1_comm = multi_scalar_mul_par(&comms, &helper_scalars);
+        let g1_comm = multi_scalar_mul_par(&comms, &comm_scalars);
 
         transcript.append_point(b"E", &g1_comm);
 
