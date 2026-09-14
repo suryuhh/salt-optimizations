@@ -1,0 +1,103 @@
+#![doc = include_str!("../README.md")]
+#![cfg_attr(not(feature = "std"), no_std)]
+
+#[cfg(not(feature = "std"))]
+extern crate alloc as std;
+
+/// Lazy initializer for global statics: waiters must park under `std` —
+/// busy-spin waiting can starve or (with rayon re-entry) deadlock expensive
+/// initializers (issue #146). `no_std` targets keep `spin`, the only option
+/// without OS blocking primitives: threads may still contend there, but
+/// `parallel` implies `std`, so the initializer never fans out onto a pool
+/// and always completes on its own thread.
+#[cfg(feature = "std")]
+pub(crate) type Lazy<T> = std::sync::LazyLock<T>;
+#[cfg(not(feature = "std"))]
+pub(crate) type Lazy<T> = spin::Lazy<T>;
+
+pub mod constant;
+pub mod empty_salt;
+pub mod proof;
+pub use proof::{fx_hashmap_serde, ProofError, SaltProof, SaltWitness, Witness};
+pub mod state;
+pub use state::{
+    hasher, state::EphemeralSaltState, state::PlainStateProvider, updates::StateUpdates,
+};
+pub mod trie;
+pub use trie::{
+    node_utils::get_child_node,
+    trie::{StateRoot, TrieUpdates},
+};
+
+pub mod traits;
+pub mod types;
+pub use types::*;
+pub mod mem_store;
+pub use mem_store::MemStore;
+#[cfg(test)]
+pub mod fuzz;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::trie::trie::StateRoot;
+    use core::error;
+    use hashbrown::HashMap;
+    use std::collections::BTreeMap;
+    use std::{boxed::Box, vec};
+
+    #[test]
+    /// A simple end-to-end test demonstrating the complete SALT workflow.
+    fn basic_integration_test() -> Result<(), Box<dyn error::Error>> {
+        // Create a PoC in-memory SALT instance
+        let store = MemStore::new();
+        let mut state = EphemeralSaltState::new(&store);
+
+        // Prepare plain key-value updates (EVM account/storage data)
+        let kvs: HashMap<_, _> = [
+            (b"account1".to_vec(), Some(b"balance100".to_vec())),
+            (b"storage_key".to_vec(), Some(b"storage_value".to_vec())),
+        ]
+        .iter()
+        .cloned()
+        .collect();
+
+        // Apply kv updates and get SALT-encoded state changes
+        let state_updates = state.update_fin(&kvs)?;
+        // "Persist" the state updates to storage (the "trie" remains unchanged)
+        store.update_state(state_updates.clone());
+
+        // Read plain value back
+        let balance = state.plain_value(b"account1")?;
+        assert_eq!(balance, Some(b"balance100".to_vec()));
+
+        // Incremental state root computation from the SALT-encoded state changes
+        let mut state_root = StateRoot::new(&store);
+        let (root_hash, trie_updates) = state_root.update_fin(&state_updates)?;
+
+        // Or compute from scratch based on the previously updated state
+        let (root_hash_from_scratch, _) = StateRoot::rebuild(&store)?;
+        assert_eq!(root_hash, root_hash_from_scratch);
+
+        // "Persist" the trie updates to storage
+        store.update_trie(trie_updates);
+
+        // Alice creates a witness for plain key-value pairs
+        let lookups = vec![b"account1".to_vec(), b"non_existent_key".to_vec()];
+        let witness = Witness::create([], &lookups, &BTreeMap::new(), &store)?;
+
+        // Bob verifies the witness against its local state root.
+        assert_eq!(root_hash, witness.state_root().unwrap());
+        assert!(witness.verify().is_ok());
+
+        // Bob looks up values from the witness using EphemeralSaltState
+        let mut bob_state = EphemeralSaltState::new(&witness);
+        assert_eq!(
+            bob_state.plain_value(b"account1")?,
+            Some(b"balance100".to_vec())
+        );
+        assert_eq!(bob_state.plain_value(b"non_existent_key")?, None);
+
+        Ok(())
+    }
+}

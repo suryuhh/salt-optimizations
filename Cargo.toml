@@ -1,0 +1,25 @@
+[workspace]
+
+members = ["banderwagon", "ipa-multipoint", "salt", "salt-macros"]
+resolver = "2"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+strip = "debuginfo"
+overflow-checks = false
+debug = 0
+
+[profile.test]
+opt-level = 3
+debug-assertions = true
+incremental = true
+debug = true
+
+[patch.crates-io]
+ark-ed-on-bls12-381-bandersnatch = { git = "https://github.com/megaeth-labs/algebra.git", rev = "80ca69c37f79d5d00750edc1602af81b5f456695" }
+ark-ff = { git = "https://github.com/megaeth-labs/algebra.git", rev = "80ca69c37f79d5d00750edc1602af81b5f456695" }
+ark-ec = { git = "https://github.com/megaeth-labs/algebra.git", rev = "80ca69c37f79d5d00750edc1602af81b5f456695" }
+ark-serialize = { git = "https://github.com/megaeth-labs/algebra.git", rev = "80ca69c37f79d5d00750edc1602af81b5f456695" }
