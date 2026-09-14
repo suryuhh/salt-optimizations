@@ -1,7 +1,5 @@
 # 7× faster SALT witness decoding and proof verification
 
-13 September 2026
-
 Combined, PRs #2–#5 make SALT witness decoding plus proof verification **7.24× faster** on dense mainnet witnesses and **2.17× faster** on ordinary head witnesses. The trie-update change is measured separately in SALT's existing benchmark. Each PR is also measured against the code immediately before it, so its individual effect is visible below.
 
 In the headline table, one witness/s means one complete SALT witness decoded and its cryptographic proof verified. This is the SALT work for one block witness; it excludes transaction execution, networking and canonical chain advancement, so it is neither validator blocks/s nor TPS. Elapsed time is wall-clock latency; process CPU adds the CPU time used by all worker threads, so it can exceed elapsed time.
