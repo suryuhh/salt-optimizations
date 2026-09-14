@@ -38,7 +38,7 @@ The existing repeated-polynomial 16,000-query case measures 9.063 ms on PR #5's 
 The two source blocks below contain the complete reproduction script and benchmark harness. The script fetches the five pinned source revisions, verifies the corpus and harness hashes, builds immutable binaries, then runs the same three alternating rounds and prints the report’s real-witness tables. It requires Linux x86-64 with AVX-512F and AVX-512IFMA and rejects other machines before building.
 
 ```sh
-curl -fL https://raw.githubusercontent.com/suryuhh/salt-optimizations/codex/docs/optimization-report/optimization-evidence/REAL_WITNESS_BENCHMARKS.md -o salt-benchmark.md
+curl -fL https://raw.githubusercontent.com/suryuhh/salt-optimizations/61c3584aeaf61309f454ee790b735e2a97a8b8d4/optimization-evidence/REAL_WITNESS_BENCHMARKS.md -o salt-benchmark.md
 python3 - <<'PY'
 from pathlib import Path
 import hashlib, re
