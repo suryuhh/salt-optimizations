@@ -4,7 +4,9 @@ use crate::math_utils::inner_product;
 use crate::transcript::{Transcript, TranscriptProtocol};
 
 use crate::{IOResult, SerdeError};
-use banderwagon::{multi_scalar_mul, trait_defs::*, Element, Fr};
+use banderwagon::{
+    multi_scalar_mul, multi_scalar_mul_affine, trait_defs::*, AffineElement, Element, Fr,
+};
 use core::iter;
 use itertools::Itertools;
 
@@ -282,6 +284,12 @@ pub fn multi_scalar_mul_par(bases: &[Element], scalars: &[Fr]) -> Element {
     // chunking the input here would multiply the window/doubling work per
     // chunk and nest thread-pool dispatches.
     multi_scalar_mul(bases, scalars)
+}
+
+/// [`multi_scalar_mul_par`] on affine bases (no conversion of the bases): one aggregate MSM,
+/// for the same reason as [`multi_scalar_mul_par`].
+pub fn multi_scalar_mul_affine_par(bases: &[AffineElement], scalars: &[Fr]) -> Element {
+    multi_scalar_mul_affine(bases, scalars)
 }
 
 fn generate_challenges(proof: &IPAProof, transcript: &mut Transcript) -> Vec<Fr> {

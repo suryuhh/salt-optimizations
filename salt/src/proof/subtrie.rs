@@ -21,7 +21,7 @@ use crate::{
     proof::{
         prover::slot_to_field,
         shape::{connect_parent_id, logic_parent_id, parents_and_points},
-        ProofError, ProofResult, SerdeCommitment,
+        PathCommitments, ProofError, ProofResult, SerdeCommitment,
     },
     traits::{StateReader, TrieReader},
     trie::node_utils::{get_child_node, subtree_leaf_start_key, subtree_root_level},
@@ -33,7 +33,7 @@ use ipa_multipoint::{lagrange_basis::LagrangeBasis, multiproof::ProverQuery};
 
 use salt_macros::prelude::*;
 use salt_macros::{chunks, into_iter, num_threads};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::{format, string::ToString, vec, vec::Vec};
 
 use hashbrown::HashMap;
@@ -46,11 +46,7 @@ const SLOT_INDEX_MASK: u64 = 0xff;
 const ROOT_LEVEL_CHILD_START: NodeId = 1;
 
 /// Information returned by the subtrie creation process
-type SubTrieInfo = (
-    Vec<ProverQuery>,
-    BTreeMap<NodeId, SerdeCommitment>,
-    FxHashMap<BucketId, u8>,
-);
+type SubTrieInfo = (Vec<ProverQuery>, PathCommitments, FxHashMap<BucketId, u8>);
 
 /// Converts cryptographic commitments from multiple internal trie nodes into scalar field elements.
 ///
@@ -251,7 +247,7 @@ where
     let (internal_nodes, leaf_nodes) = parents_and_points(salt_keys, &buckets_level);
 
     // Step 4: Collect cryptographic commitments for all parent nodes
-    let parents_commitments: BTreeMap<NodeId, SerdeCommitment> = internal_nodes
+    let parents_commitments: PathCommitments = internal_nodes
         .iter()
         .chain(leaf_nodes.iter())
         .map(|(&parent, _)| {
@@ -266,7 +262,7 @@ where
                     })?,
             );
 
-            Ok((physical_parent, SerdeCommitment(commitment)))
+            Ok((physical_parent, SerdeCommitment::from(commitment)))
         })
         .collect::<ProofResult<_>>()?;
 
